@@ -11,6 +11,8 @@ If you prefer convenience and can settle for breakable encrytpion then you are p
 
 If you find yourself wondering whether it is worth the trouble, I recommend that you brush up on cryptography theory and compare one time pad encryption with other approaches.
 
+This project is licensed under the Creative Commons [Attribution 3.0 Unported](http://creativecommons.org/licenses/by/3.0/) which means you can modify it and use it commercially but I ask that you provide appropriate attribution (give me credit).
+
 Recommended Use Cases
 =====================
 
