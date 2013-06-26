@@ -5,15 +5,15 @@
 .c.o:
 	$(CC) -c -o $@ $^
 
-all : otpadgen
+all : otpadgen otpadmsg
 
-otpadgen : otpadgen.c
+otpadgen : otpadgen.o otpadutils.o
 	$(CC) $(DEBUG) -o $@ $^ 
 
-otpadmsg : otpadmsg.c
+otpadmsg : otpadmsg.o otpadutils.o
 	$(CC) $(DEBUG) -o $@ $^ 
 
-otpadrnd : otpadrnd.c
+otpadrnd : otpadrnd.o
 	$(CC) $(DEBUG) -o $@ $^ 
 
 clean :

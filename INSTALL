@@ -1,0 +1,12 @@
+One Time Pad Utilities
+
+The one time pad utilities has no external dependencies so you should
+find that building for your favorite platform is easy and quick.  If
+you run into problems building the binaries please drop me a note and
+I will do my best to fix any porting issues and get those fixes back
+into the tree.  Even better...send me your fixes :)
+
+Dependencies
+------------
+- modern incarnation of gcc (or similar C compiler)
+- make

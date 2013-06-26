@@ -1,4 +1,4 @@
-// otpadgen.c
+// otpadmsg.c
 // Glen Wiley <glen.wiley@gmail.com>
 //
 // one time pad generator for use in strong cryptographic exchanges
@@ -259,4 +259,4 @@ main(int argc, char *argv[])
 	return 0;
 } // main
 
-// otpadgen.c
+// otpadmsg.c
