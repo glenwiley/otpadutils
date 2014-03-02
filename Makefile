@@ -2,24 +2,15 @@
 # Glen Wiley <glen.wiley@gmail.com>
 #
 
-.c.o:
-	$(CC) -c -o $@ $^
-
-all : otpadgen otpadmsg
-
-otpadgen : otpadgen.o otpadutils.o
-	$(CC) $(DEBUG) -o $@ $^ 
-
-otpadmsg : otpadmsg.o otpadutils.o
-	$(CC) $(DEBUG) -o $@ $^ 
-
-otpadrnd : otpadrnd.o
-	$(CC) $(DEBUG) -o $@ $^ 
-
-clean :
-	rm -f *.o
-
-clobber : clean
-	rm -f otpadgen otpadmsg otpadrnd
-
-# end Makefile
+default:
+	@echo "To build for your platform invoke make with the appropriate Makefil"
+	@echo
+	@echo "OSX:"
+	@echo "  make -f Makefile.osx; make -f Makefile.osx install"
+	@echo
+	@echo "targets:"
+	@echo "   default    builds binaries for all the utilities"
+	@echo "   clean      remove .o files and other build artifacts (preserve eecutables)"
+	@echo "   clobber    make clean and remove executables"
+	@echo "   install    install binaries into system folders (probably needs root)"
+	@echo "   uninstall  uninstall binaries from system folders (probably needs root)"
