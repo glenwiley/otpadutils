@@ -3,13 +3,17 @@
 Glen Wiley <glen.wiley@gmail.com>
 
 This is a set of command line utilities for creating and using one time pads
-for encrypting and decrypting messages on common operating systems.
+for encrypting and decrypting messages.
 
-This tool set will seem awkward and inconvenient when you first begin using it,
+This approach will seem awkward and inconvenient when you first begin using it,
 however it is useful to note that strong encryption is by its nature awkward
-and this is pretty much as strong as it gets (when used properly).  If you
-prefer convenience and can settle for breakable encrytpion then you are
-probably better off with a different tool set.
+and this is as strong as it gets (when used properly).  If you prefer
+convenience and can settle for breakable encrytpion then you are probably
+better off with a different tool set.
+
+The only way to compromise this approach is to let someone else have
+access to your one time pad sheet or to use the same sheet (or portion
+of a sheet) for more than one message.
 
 If you find yourself wondering whether it is worth the trouble, I recommend
 that you brush up on cryptography theory and compare one time pad encryption
@@ -27,22 +31,26 @@ is entirely terminal/CLI based.
 
 #Building
 
-Issue make using the Makefile that matches your operating system, forexample
-you might invoke make on OSX as:
+Use the Makefile that matches your operating system, for example on
+Linux:
 
 ```
-# make -f Makefile.osx
-# make -f Makefile.osx install
+# make -f Makefile.linux
+# make -f Makefile.linux install
 ```
-
 #Recommended Use Cases
 
 ##Generate a single sheet
 
 Nearly the simplest way to use the program is:
 ```
-otpadgen -s abb -o text > sheet.otpad
+otpadgen -o matrix > matrix
+otpadgen > sheet
 ```
+
+You then give a copy of both the matrix and the sheet to your peer, the
+matrix doesn't change from sheet to sheet but a new sheet should be used
+for each message.
 
 ##Generate a set of sheets
 
@@ -50,10 +58,11 @@ These sheets can be generated then handed to the peer, in order to use them you
 must agree on which sheet in the set you are using.
 
 ```
+otpadgen -o matrix > matrix
 dt=$(date)
 for((sn=0;sn<10;sn++))
 do
-        otpadgen -h"sheet $sn : $dt" -s abb -o text > sheet$sn.otpad
+        otpadgen -h"sheet $sn : $dt" -s abb -o text > sheet$sn
 done
 
 ```
@@ -66,14 +75,14 @@ without assistance from a machine.  It is certainyl faster if you use a computer
 to encrypt and decrypt, but it is not difficult to do by hand.
 
 ##Host Security
-The two most important rules of using one time pads to avoid weakening their utility
-as a cryptographic tool are:
+The two most important rules of using one time pads to avoid weakening their
+utility as a cryptographic tool are:
 
-* NEVER reuse a one time pad.  There are some cases in which multiple receivers might
-use the same pad but NEVER encrypt more than one message with the same bytes in the
-same one time pad.
-* NEVER share the one time pad with anyone you do not intend to share the clear text
-of your message.
+* NEVER reuse a one time pad.  There are some cases in which multiple 
+receivers might use the same pad but NEVER encrypt more than one message 
+with the same bytes in the same one time pad.
+* NEVER share the one time pad with anyone you do not intend to share the 
+clear text of your message.
 
 It is worth noting that network connected hosts are simply NOT as secure as a machine
 that has no interface with the outside world.  The most secure hosts are completely
@@ -87,32 +96,62 @@ there is a network connection of any kind then that host can be compromised.
 ## Choosing a Character set
 
 The character set used to generate the pad is typically just alpha/numeric characters.
-In our options we include the space as an underscore character.  A full alphabet 
+We include the space as an underscore character.  A full alphabet 
 includes a number of the more useful symbols, the downside to these is that when
-they are handwritten it is not difficult to make a mistake interpreting what
+they are handwritten it is easy to make a mistake interpreting what
 someone else has written.
 
-Choosing how you will write characters (if you and encrypting by hand) is also
+Choosing how you will write characters (if you are encrypting by hand) is also
 very important - it is a good idea to make you fours (4) and nines (9) distinct,
 your sevens (7) and ones (1), zeros (0) and ohs (O).
 
 ##How to Encrypt
-1. Coordinate which sheet you will be using with the receiving party.
-2. Write your clear text above the characters on the sheet.
-3. For each character:
-- Look up the clear text character on the column header in the matrix.
-- Look up the key character on the row header in the matrix.
-- The enrypted character is at the interesction of the column/row write that below the key character on your sheet.
-- The characters under the key text are your encrypted message, send this to the receiving party.
-4. Rejoice at the strength of your cryptography!
+1. Generate your one time pad (otpsheet) and the character matrix and give a copy to 
+your peer
+```
+# otpadgen > otpsheet
+# otpadgen -o matrix > otpmatrix
+```
+2. Write your clear text above the characters on the one time pad.
+3. Encrypt one character at a time using the matrix:
+- Find the column headed by the clear text character
+- In that column find the row whose character matches the key character
+- The first character in the row is your encrypted character, write this under the key on the one time pad sheet
+4. Once you have done this for all the characters in your message, copy the encrypted
+   characters to a separate sheet of paper - this is the message that you can hand your
+   peer to be decrypted.
+5. Rejoice at the strength of your cryptography!
 
 ##How to Decrypt
-1. Coordinate which sheet you will use with the sender.
-2. Write the encrypted message BELOW the key characters on the sheet.
-3. Look up the key character on the column header.
-4. Find the encrypted character in that column.
-5. Write the character in the row header above the key character.
-6. The characters above the key characters are the decrypted message.
+1. Obtain copies of the one time pad sheet and the character matrix from your peer.
+2. Write the encrypted message above the key characters on the one time pad.
+3. Decrypt one character at a time using the matrix:
+- Find the column headed by the message character 
+- In that column fund the row whose character matches the key character
+- The first character in the row is your encrypted character, write this under the key on the one time pad sheet
+6. The characters below the key characters are the decrypted message.
+7. Glory in the light of your unbreakable message.
+
+Here is an example of looking up the characters using the matrix:
+
+Given the following table segment (this is contrived to keep the demo short):
+
+    _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 
+-----------------------------------------------------------------------------
+_ | _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 
+0 | 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 
+1 | 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 
+2 | 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1 
+3 | 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1 2 
+
+And given this message text:  M U S T _
+And given this one time pad:  O X T V 0
+The encrypted text would be:  1 2 0 1 0
+
+The Decrypt would look like this:
+Given this encrypted message:       1 2 0 1 0
+Given the same OTP used to encrypt: O X T V 0
+Results in the cleartext:           M U S T _
 
 ##otpadgen Command Reference
 ```
@@ -157,10 +196,9 @@ Steps to encrypt:
 
 Steps to decrypt:
 1. Coordinate which sheet you will use with the sender.
-2. Write the encrypted message BELOW the key characters on the sheet.
-3. Look up the key character on the column header.
-4. Find the encrypted character in that column.
-5. Write the character in the row header above the key character.
+2. Write one character of the encrypted text over each character in the one time pad
+3. For each character:
+	a.
 6. The characters above the key characters are the decrypted message.
 DUL1GWILEY-M2:otpadutils gwiley$ 
 ```
@@ -172,6 +210,12 @@ DUL1GWILEY-M2:otpadutils gwiley$
 * http://www.scn.org/~bh162/one-time_pad_encryption.html
 
 #Random number generation
+
+On Linux we default to /dev/urandom for our source of entropy, /dev/random is a
+better choice, however it will block waiting for entropy if it exhausts the pool.
+If you want the best entropy from a PRNG on Linux then you should use /dev/random
+via the "-r" option and wait for it to accumulate enough entropy to generate the
+one time pad (it will look as though it is hung while it waits).
 
 Weak random number generation will result in weak cryptography.  If a mal-actor
 can predict your random number generator output then they may be able to divine
@@ -201,6 +245,9 @@ Better sources of entropy are simple hardware devices for which the hardware
 and software design is fully transparent.
 
 #TODO
+* fix terms - is this a vignere table rather than matrix
+* warn on chars not included in matrix
+* add automatic checksum
 * port to freebsd, osx
 * use autoconf/automake
 ** test for arc4random (avail on osx, not default ubuntu)

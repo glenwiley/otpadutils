@@ -4,7 +4,7 @@
 #
 PREFIX=/usr/local
 BINARIES=otpadgen otpadmsg
-DEBGUG=-g
+DEBUG=-g
 
 .c.o:
 	$(CC) $(DEBUG) -c -o $@ $<
@@ -12,10 +12,10 @@ DEBGUG=-g
 all : $(BINARIES)
 
 otpadgen : otpadgen.o otpadutils.o
-	$(CC) -o $@ $?
+	$(CC) $(DEBUG) -o $@ $^
 
 otpadmsg : otpadmsg.o otpadutils.o
-	$(CC) -o $@ $?
+	$(CC) $(DEBUG) -o $@ $^
 
 install :
 	install -g root -o root $(BINARIES) -t $(PREFIX)/bin

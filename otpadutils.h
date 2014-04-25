@@ -16,10 +16,14 @@
 #define OTPAD_DFLT_LINELEN  30
 #define OTPAD_SETFULL       'f'
 #define OTPAD_SETAB         'a'
-#define OTPAD_DFLT_SET      'f'
+#define OTPAD_DFLT_SET      'a'
+#define OTPAD_DFLT_RAND     "/dev/urandom"
 
 extern char *g_setfull;
 extern char *g_setab;
 extern char *g_chartbl;
+extern char *g_fnrand;
+
+int getrandchar(char *fnrand);
 
 #endif // OTPADUTILS_H

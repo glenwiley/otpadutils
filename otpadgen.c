@@ -5,31 +5,16 @@
 //
 // TODO: pretty formatted output, troff, HTML, PDF
 // TODO: option for using numbers only (hex/decimal)
-// TODO: add line break support
-// TODO: randomicity test output
-// TODO: encrypt/decrypt function
+// TODO: add line break support to char table
+// TODO: allow user to specify a character table
 
+#include <errno.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include "otpadutils.h"
-
-//---------------------------------------- getrandchar
-char
-getrandchar(void)
-{
-	int tbllen;
-	char c;
-
-	tbllen = strlen(g_chartbl);
-
-//	c = g_chartbl[arc4random() % tbllen];
-	c = g_chartbl[random() % tbllen];
-
-	return c;
-} // getrandchar
 
 //---------------------------------------- output_matrix
 void
@@ -91,7 +76,13 @@ output_text(char *hdr, int keylen, int wordlen, int linelen)
 	for(i=0; i<keylen; i++)
 	{
 		lc++;
-		c = getrandchar();
+		c = getrandchar(NULL);
+		if(c == -1)
+		{
+			printf("ERROR: failed to read from entropy source %s, %s, exiting...\n"
+			 , g_fnrand, strerror(errno));
+			exit(1);
+		}
 
 		printf("%c ", c);
 
@@ -114,7 +105,7 @@ void
 usage(void)
 {
 	printf(
-	 "USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-k <keylen>] [-s <f|a>] -o <text|num> \n"
+	 "USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-r <devrand>] [-k <keylen>] [-s <f|a>] [-o <text|num>] \n"
 	 "-h <header>   print this string as the first line of the output\n"
 	 "-H            print a generated header string as the first line of the output\n"
 	 "-k <keylen>   key length in chars\n"
@@ -123,8 +114,10 @@ usage(void)
 	 "              note that each char needs 2 spaces + word gaps\n"
 	 "              default: %d\n"
 	 "-m            character matrix output, no pad is generated\n"
-	 "-o text       output as simple text\n"
+	 "-o text       output as simple text (default)\n"
 	 "   num        output as numbers\n"
+	 "-r <devrand>  device from which to read entropy (as binary stream)\n"
+	 "              default: %s\n"
 	 "-s <f|a>      character set to use\n"
 	 "              f = full character set: alpha, digit, punctuation (space=_)\n"
 	 "              a = abbreviated character set: alpha, digit (space=_)\n"
@@ -142,26 +135,58 @@ usage(void)
 	 "\n"
 	 "You will need the character matrix (Vigenere square) to encrypt/decrypt.\n"
 	 "\n"
-	 "Steps to encrypt:\n"
-	 "1. Coordinate which sheet you will be using with the receiving party.\n"
-	 "2. Write your clear text above the characters on the sheet.\n"
-	 "3. For each character:\n"
-	 "   a. Look up the clear text character on the column header in the matrix.\n"
-	 "   b. Look up the key character on the row header in the matrix\n"
-	 "   c. The enrypted character is at the interesction of the column/row\n"
-	 "      write that below the key character on your sheet.\n"
-	 "4. The characters under the key text are your encrypted message, send this\n"
-	 "   to the receiving party.\n"
+	 "How to Encrypt\n"
+	 "--------------\n"
+	 "1. Generate your one time pad (otpsheet) and the character matrix and give\n"
+	 "   a copy to your peer\n"
+	 "   # otpadgen > otpsheet\n"
+	 "   # otpadgen -o matrix > otpmatrix\n"
+	 "2. Write your clear text above the characters on the one time pad.\n"
+	 "3. Encrypt one character at a time using the matrix:\n"
+	 "   - Find the column headed by the clear text character\n"
+	 "   - In that column find the row whose character matches the key character\n"
+	 "   - The first character in the row is your encrypted character, write\n"
+	 "     this under the key on the one time pad sheet\n"
+	 "4. Once you have done this for all the characters in your message, copy the\n"
+	 "   encrypted characters to a separate sheet of paper - this is the message\n"
+	 "   that you can hand your peer to be decrypted.\n"
 	 "5. Rejoice at the strength of your cryptography!\n"
 	 "\n"
-	 "Steps to decrypt:\n"
-	 "1. Coordinate which sheet you will use with the sender.\n"
-	 "2. Write the encrypted message BELOW the key characters on the sheet.\n"
-	 "3. Look up the key character on the column header.\n"
-	 "4. Find the encrypted character in that column.\n"
-	 "5. Write the character in the row header above the key character.\n"
-	 "6. The characters above the key characters are the decrypted message.\n"
-	 , OTPAD_DFLT_KEYLEN, OTPAD_DFLT_LINE, OTPAD_DFLT_SET
+	 "How to Decrypt\n"
+	 "--------------\n"
+	 "1. Obtain copies of the one time pad sheet and the character matrix from your\n"
+	 "   peer.\n"
+	 "2. Write the encrypted message above the key characters on the one time pad.\n"
+	 "3. Decrypt one character at a time using the matrix:\n"
+	 "   - Find the column headed by the message character \n"
+	 "   - In that column fund the row whose character matches the key character\n"
+	 "   - The first character in the row is your encrypted character, write this\n"
+	 "     under the key on the one time pad sheet\n"
+	 "4. The characters below the key characters are the decrypted message.\n"
+	 "5. Glory in the light of your unbreakable message.\n"
+	 "\n"
+	 "Here is an example of looking up the characters using the matrix:\n"
+	 "\n"
+	 "Given the following table segment (this is contrived to keep the demo short):\n"
+	 "\n"
+	 "    _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z\n"
+	 "-----------------------------------------------------------------------------\n"
+	 "_ | _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z\n"
+	 "0 | 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _\n"
+	 "1 | 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0\n"
+	 "2 | 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1\n"
+	 "3 | 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1 2\n"
+	 "\n"
+	 "And given this message text:  M U S T _\n"
+	 "And given this one time pad:  O X T V 0\n"
+	 "The encrypted text would be:  1 2 0 1 0\n"
+	 "\n"
+	 "The Decrypt would look like this:\n"
+	 "Given this encrypted message:       1 2 0 1 0\n"
+	 "Given the same OTP used to encrypt: O X T V 0\n"
+	 "Results in the cleartext:           M U S T _\n"
+	 "\n"
+	 , OTPAD_DFLT_KEYLEN, OTPAD_DFLT_LINE, OTPAD_DFLT_RAND, OTPAD_DFLT_SET
 	 , OTPAD_DFLT_WORDLEN, g_setfull, g_setab
 	);
 } // usage
@@ -174,14 +199,14 @@ main(int argc, char *argv[])
 	int keylen      = OTPAD_DFLT_KEYLEN;
 	int wordlen     = OTPAD_DFLT_WORDLEN;
 	int linelen     = OTPAD_DFLT_LINE;
-	char outputmode = '\0';
+	char outputmode = OTPAD_OUTPUT_TEXT;
 	char charset    = OTPAD_DFLT_SET;
 	char *hdr       = NULL;
 	time_t now;
 	
 	//-------------------- command line options
 
-	while((opt=getopt(argc, argv, "?Hh:k:l:mo:s:w:")) != -1)
+	while((opt=getopt(argc, argv, "?Hh:k:l:mo:r:s:w:")) != -1)
 	{
 		switch(opt)
 		{
@@ -212,6 +237,10 @@ main(int argc, char *argv[])
 				outputmode = optarg[0];
 				break;
 
+			case 'r':
+				g_fnrand = optarg;
+				break;
+
 			case 's':
 				charset = optarg[0];
 				break;
@@ -238,6 +267,13 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
+	if(getrandchar(g_fnrand) == -1)
+	{
+		printf("ERROR: failed to read from entropy source %s, %s, exiting...\n"
+		 , g_fnrand, strerror(errno));
+		exit(1);
+	}
+
 	if(outputmode != OTPAD_OUTPUT_MATRIX && keylen == 0)
 	{
 		printf("otpadgen ERROR, no key length specified, exiting...\n");
@@ -246,7 +282,6 @@ main(int argc, char *argv[])
 
 	if(outputmode == OTPAD_OUTPUT_TEXT)
 	{
-		srandom((int) time(NULL));
 		output_text(hdr, keylen, wordlen, linelen);
 	} else if(outputmode == OTPAD_OUTPUT_MATRIX)
 	{

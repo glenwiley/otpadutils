@@ -9,27 +9,13 @@
 // TODO: randomicity test output
 // TODO: encrypt/decrypt function
 
+#include <errno.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include "otpadutils.h"
-
-//---------------------------------------- getrandchar
-char
-getrandchar(void)
-{
-	int tbllen;
-	char c;
-
-	tbllen = strlen(g_chartbl);
-
-//	c = g_chartbl[arc4random() % tbllen];
-	c = g_chartbl[random() % tbllen];
-
-	return c;
-} // getrandchar
 
 //---------------------------------------- output_matrix
 void
@@ -91,7 +77,13 @@ output_text(char *hdr, int keylen, int wordlen, int linelen)
 	for(i=0; i<keylen; i++)
 	{
 		lc++;
-		c = getrandchar();
+		c = getrandchar(NULL);
+		if(c == -1)
+		{
+			printf("ERROR: failed to read from entropy source %s, exiting...\n"
+			 , strerror(errno));
+			exit(1);
+		}
 
 		printf("%c ", c);
 
