@@ -25,7 +25,8 @@ getrandchar(void)
 
 	tbllen = strlen(g_chartbl);
 
-	c = g_chartbl[arc4random() % tbllen];
+//	c = g_chartbl[arc4random() % tbllen];
+	c = g_chartbl[random() % tbllen];
 
 	return c;
 } // getrandchar
@@ -245,6 +246,7 @@ main(int argc, char *argv[])
 
 	if(outputmode == OTPAD_OUTPUT_TEXT)
 	{
+		srandom((int) time(NULL));
 		output_text(hdr, keylen, wordlen, linelen);
 	} else if(outputmode == OTPAD_OUTPUT_MATRIX)
 	{

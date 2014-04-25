@@ -1,0 +1,32 @@
+# Makefile for One Time Pad tools
+# linux
+# Glen Wiley <glen.wiley@gmail.com>
+#
+PREFIX=/usr/local
+BINARIES=otpadgen otpadmsg
+DEBGUG=-g
+
+.c.o:
+	$(CC) $(DEBUG) -c -o $@ $<
+
+all : $(BINARIES)
+
+otpadgen : otpadgen.o otpadutils.o
+	$(CC) -o $@ $?
+
+otpadmsg : otpadmsg.o otpadutils.o
+	$(CC) -o $@ $?
+
+install :
+	install -g root -o root $(BINARIES) -t $(PREFIX)/bin
+
+uninstall :
+	for f in $(BINARIES) do; rm -f $(PREFIX)/$f; done
+
+clean:
+	rm -f *.o core*
+
+clobber: clean
+	rm -f $(BINARIES)
+
+.PHONEY: install clean clobber

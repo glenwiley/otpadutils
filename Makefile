@@ -5,8 +5,8 @@
 default:
 	@echo "To build for your platform invoke make with the appropriate Makefil"
 	@echo
-	@echo "OSX:"
-	@echo "  make -f Makefile.osx; make -f Makefile.osx install"
+	@echo "linux:"
+	@echo "  make -f Makefile.linux; make -f Makefile.linux install"
 	@echo
 	@echo "targets:"
 	@echo "   default    builds binaries for all the utilities"

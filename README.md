@@ -6,9 +6,9 @@ This is a set of command line utilities for creating and using one time pads
 for encrypting and decrypting messages on common operating systems.
 
 This tool set will seem awkward and inconvenient when you first begin using it,
-however it is useful to note that strong encryption is by its nature awkward and
-this is pretty much as strong as it gets (when used properly).
-If you prefer convenience and can settle for breakable encrytpion then you are
+however it is useful to note that strong encryption is by its nature awkward
+and this is pretty much as strong as it gets (when used properly).  If you
+prefer convenience and can settle for breakable encrytpion then you are
 probably better off with a different tool set.
 
 If you find yourself wondering whether it is worth the trouble, I recommend
@@ -22,12 +22,13 @@ attribution (give me credit).
 
 #Building and Installing
 
-There are no external dependencies (beyond a modern C compiler).  The interface is 
-entirely terminal/CLI based.
+There are no external dependencies (beyond a modern C compiler).  The interface
+is entirely terminal/CLI based.
 
 #Building
 
-Issue make using the Makefile that matches your operating system, forexample you might invoke make on OSX as:
+Issue make using the Makefile that matches your operating system, forexample
+you might invoke make on OSX as:
 
 ```
 # make -f Makefile.osx
@@ -200,7 +201,8 @@ Better sources of entropy are simple hardware devices for which the hardware
 and software design is fully transparent.
 
 #TODO
-* port to freebsd, linux
+* port to freebsd, osx
 * use autoconf/automake
+** test for arc4random (avail on osx, not default ubuntu)
 * allow for alternative sources of entropy (files, hardware, etc)
 * man pages
