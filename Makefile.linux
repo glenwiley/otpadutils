@@ -4,6 +4,7 @@
 #
 PREFIX=/usr/local
 BINARIES=otpadgen otpadmsg
+CHARTBLS=alphanum.ctbl full.ctbl
 DEBUG=-g
 
 .c.o:
@@ -18,10 +19,13 @@ otpadmsg : otpadmsg.o otpadutils.o
 	$(CC) $(DEBUG) -o $@ $^
 
 install :
-	install -g root -o root $(BINARIES) -t $(PREFIX)/bin
+	install -g root -o root -t $(PREFIX)/bin $(BINARIES) 
+	install -g root -o root -m ugo+r -t $(PREFIX)/lib/otpadutils $(CHARTBLS) 
 
 uninstall :
 	for f in $(BINARIES) do; rm -f $(PREFIX)/$f; done
+	for f in $(CHARTBLS) do; rm -f $(PREFIX)/lib/otpadutils/$f; done
+	rmdir $(PREFIX)/lib/otpadutils
 
 clean:
 	rm -f *.o core*

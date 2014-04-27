@@ -11,19 +11,23 @@
 #define OTPAD_OUTPUT_MATRIX 'm'
 #define OTPAD_OUTPUT_TEXT   't'
 #define OTPAD_DFLT_LINE     25
+#define OTPAD_MAX_LINE      255
 #define OTPAD_DFLT_KEYLEN   400
 #define OTPAD_DFLT_WORDLEN  5
 #define OTPAD_DFLT_LINELEN  30
+#define OTPAD_TABLE_SIZE    256
 #define OTPAD_SETFULL       'f'
 #define OTPAD_SETAB         'a'
+#define OTPAD_SETHEX        'h'
 #define OTPAD_DFLT_SET      'a'
 #define OTPAD_DFLT_RAND     "/dev/urandom"
-
-extern char *g_setfull;
-extern char *g_setab;
+enum OTPAD_TBL_TYPE {otpad_tbl_chr, otpad_tbl_num};
+extern char *g_ctbl_full;
+extern char *g_ctbl_alnum;
 extern char *g_chartbl;
+extern int   g_chartbl_typ;
 extern char *g_fnrand;
-
 int getrandchar(char *fnrand);
+char *readchartbl(char *filename);
 
 #endif // OTPADUTILS_H

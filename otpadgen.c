@@ -4,9 +4,7 @@
 // one time pad generator for use in strong cryptographic exchanges
 //
 // TODO: pretty formatted output, troff, HTML, PDF
-// TODO: option for using numbers only (hex/decimal)
 // TODO: add line break support to char table
-// TODO: allow user to specify a character table
 
 #include <errno.h>
 #include <string.h>
@@ -17,6 +15,7 @@
 #include "otpadutils.h"
 
 //---------------------------------------- output_matrix
+// print a matrix that can be used to manually encrypt/decrypt
 void
 output_matrix(char *hdr)
 {
@@ -30,40 +29,60 @@ output_matrix(char *hdr)
 		printf("%s\n\n", hdr);
 	}
 
-	tbllen = strlen(g_chartbl);
+	// character tables are all printed the same way
 
-	printf("    ");
-	for(col=0; col<tbllen; col++)
-		printf("%c ", g_chartbl[col]);
-	printf("\n");
-	printf("---");
-	for(col=0; col<tbllen; col++)
-		printf("--");
-	printf("\n");
-
-	for(line=0; line<tbllen; line++)
+	if(g_chartbl_typ == otpad_tbl_chr)
 	{
-		printf("%c | ", g_chartbl[line]);
+		tbllen = strlen(g_chartbl);
+
+		printf("    ");
 		for(col=0; col<tbllen; col++)
-		{
-			c = line + col;
-			if(c >= tbllen)
-				c = c - tbllen;
-			printf("%c ", g_chartbl[c]);
-		}
+			printf("%c ", g_chartbl[col]);
 		printf("\n");
-	}
+		printf("---");
+		for(col=0; col<tbllen; col++)
+			printf("--");
+		printf("\n");
+
+		for(line=0; line<tbllen; line++)
+		{
+			printf("%c | ", g_chartbl[line]);
+			for(col=0; col<tbllen; col++)
+			{
+				c = line + col;
+				if(c >= tbllen)
+					c = c - tbllen;
+				printf("%c ", g_chartbl[c]);
+			}
+			printf("\n");
+		}
+	} // if otpad_tbl_chr
+
+	// numeric table is generated and printed as hex numbers
+
+	if(g_chartbl_typ == otpad_tbl_num)
+	{
+		printf(
+		 "All values range from 0x00-FF\n"
+		 "msg is a single value from the message\n"
+		 "key is a single value from the one time pad sheet\n"
+		 "res is the resulting value of combining msg and key\n"
+		 "\n"
+		 "res = msg XOR key\n"
+		 );
+
+	} // if otpad_tbl_num
 
 	return;
 } // output_matrix
 
 //---------------------------------------- output_text
-// produce plain text output
+// produce plain text output for a one time pad
 void
 output_text(char *hdr, int keylen, int wordlen, int linelen)
 {
 	int  i;
-	char c;
+	unsigned char c;
 	char lc = 0;
 
 	if(hdr != NULL)
@@ -79,12 +98,15 @@ output_text(char *hdr, int keylen, int wordlen, int linelen)
 		c = getrandchar(NULL);
 		if(c == -1)
 		{
-			printf("ERROR: failed to read from entropy source %s, %s, exiting...\n"
-			 , g_fnrand, strerror(errno));
+			fprintf(stderr, "ERROR: failed to read from entropy source %s, %s,"
+			 " exiting...\n", g_fnrand, strerror(errno));
 			exit(1);
 		}
 
-		printf("%c ", c);
+		if(g_chartbl_typ == otpad_tbl_chr)
+			printf("%c ", c);
+		if(g_chartbl_typ == otpad_tbl_num)
+			printf("%.2X ", c);
 
 		if(wordlen > 0 && lc % wordlen == 0)
 			printf("   ");
@@ -105,7 +127,7 @@ void
 usage(void)
 {
 	printf(
-	 "USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-r <devrand>] [-k <keylen>] [-s <f|a>] [-o <text|num>] \n"
+	 "USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-r <devrand>] [-k <keylen>] [-s <a|f|h>] [-o <text|num>] \n"
 	 "-h <header>   print this string as the first line of the output\n"
 	 "-H            print a generated header string as the first line of the output\n"
 	 "-k <keylen>   key length in chars\n"
@@ -118,10 +140,14 @@ usage(void)
 	 "   num        output as numbers\n"
 	 "-r <devrand>  device from which to read entropy (as binary stream)\n"
 	 "              default: %s\n"
-	 "-s <f|a>      character set to use\n"
-	 "              f = full character set: alpha, digit, punctuation (space=_)\n"
+	 "-s <a|f|h>    character set to use\n"
 	 "              a = abbreviated character set: alpha, digit (space=_)\n"
+	 "              f = more full character set: alpha, digit, punct (space=_)\n"
+	 "              h = hex numbers from 00-FF\n"
 	 "              default: %c\n"
+	 "-T <tbl_file> character table file, use in place of the default character sets\n"
+	 "              note that this must also be provided to your communication peers\n"
+	 "              in order to exchange messages\n"
 	 "-w <wordlen>  word length in chars, affects printing only\n"
 	 "              default: %d\n"
 	 "\n"
@@ -187,7 +213,7 @@ usage(void)
 	 "Results in the cleartext:           M U S T _\n"
 	 "\n"
 	 , OTPAD_DFLT_KEYLEN, OTPAD_DFLT_LINE, OTPAD_DFLT_RAND, OTPAD_DFLT_SET
-	 , OTPAD_DFLT_WORDLEN, g_setfull, g_setab
+	 , OTPAD_DFLT_WORDLEN, g_ctbl_full, g_ctbl_alnum
 	);
 } // usage
 
@@ -202,11 +228,12 @@ main(int argc, char *argv[])
 	char outputmode = OTPAD_OUTPUT_TEXT;
 	char charset    = OTPAD_DFLT_SET;
 	char *hdr       = NULL;
+	char *fntbl     = NULL;
 	time_t now;
-	
+
 	//-------------------- command line options
 
-	while((opt=getopt(argc, argv, "?Hh:k:l:mo:r:s:w:")) != -1)
+	while((opt=getopt(argc, argv, "?Hh:k:l:mo:r:s:T:w:")) != -1)
 	{
 		switch(opt)
 		{
@@ -245,6 +272,10 @@ main(int argc, char *argv[])
 				charset = optarg[0];
 				break;
 
+			case 'T':
+				fntbl = optarg;
+				break;
+				
 			case 'w':
 				wordlen = atoi(optarg);
 				break;
@@ -257,28 +288,44 @@ main(int argc, char *argv[])
 		}
 	} // while
 
+	// arrange our character table
+
 	if(charset == OTPAD_SETFULL)
-		g_chartbl = g_setfull;
+		g_chartbl = g_ctbl_full;
 	else if(charset == OTPAD_SETAB)
-		g_chartbl = g_setab;
-	else
+		g_chartbl = g_ctbl_alnum;
+	else if(charset == OTPAD_SETHEX)
 	{
-		printf("otpadgen ERROR, unrecognized character set, exiting...\n");
+		g_chartbl = NULL;
+		g_chartbl_typ = otpad_tbl_num;
+	}
+	if(fntbl != NULL)
+	{
+		g_chartbl = readchartbl(fntbl);
+	}
+
+	if(g_chartbl == NULL && g_chartbl_typ == otpad_tbl_chr)
+	{
+		fprintf(stderr, "ERROR, unrecognized character set, exiting...\n");
 		exit(1);
 	}
 
+	// sanity check our entropy source
+
 	if(getrandchar(g_fnrand) == -1)
 	{
-		printf("ERROR: failed to read from entropy source %s, %s, exiting...\n"
+		fprintf(stderr, "ERROR: failed to read from entropy source %s, %s, exiting...\n"
 		 , g_fnrand, strerror(errno));
 		exit(1);
 	}
 
 	if(outputmode != OTPAD_OUTPUT_MATRIX && keylen == 0)
 	{
-		printf("otpadgen ERROR, no key length specified, exiting...\n");
+		fprintf(stderr, "ERROR, no key length specified, exiting...\n");
 		exit(1);
 	}
+
+	// generate our output, either a matrix or a one time pad sheet
 
 	if(outputmode == OTPAD_OUTPUT_TEXT)
 	{
@@ -289,7 +336,7 @@ main(int argc, char *argv[])
 	}
 	else
 	{
-		printf("otpadgen ERROR, no output mode specified, exiting...\n");
+		fprintf(stderr, "ERROR, no output mode specified, exiting...\n");
 		exit(1);
 	}
 

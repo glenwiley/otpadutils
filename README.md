@@ -64,7 +64,23 @@ for((sn=0;sn<10;sn++))
 do
         otpadgen -h"sheet $sn : $dt" -s abb -o text > sheet$sn
 done
+```
 
+##Use otpadmsg to encrypt a message
+
+Given a one time pad sheet (file name 'sheet') that you previously generated and
+a message file named 'msg' that you would like to encrypt:
+
+```
+# otpadmsg -S sheet -m msg > msg.enc
+```
+
+If you have already given the one time pad sheet to your friend then
+you may then send msg.enc over a non-secure media to him.  Once he
+receives it the following command will decrypt it:
+
+```
+# otpadmsg -S sheet -m msg.enc > msg
 ```
 
 #How to use one time pads
@@ -155,7 +171,7 @@ Results in the cleartext:           M U S T _
 
 ##otpadgen Command Reference
 ```
-USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-k <keylen>] [-s <f|a>] -o <text|num> 
+USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-r <devrand>] [-k <keylen>] [-s <f|a>] [-o <text|num>] 
 -h <header>   print this string as the first line of the output
 -H            print a generated header string as the first line of the output
 -k <keylen>   key length in chars
@@ -163,12 +179,15 @@ USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-k <keyle
 -l <linelen>  line length in chars, used by text output mode
               note that each char needs 2 spaces + word gaps
               default: 25
--m            character matrix output, no pad is generated-o text       output as simple text
+-m            character matrix output, no pad is generated
+-o text       output as simple text (default)
    num        output as numbers
+-r <devrand>  device from which to read entropy (as binary stream)
+              default: /dev/urandom
 -s <f|a>      character set to use
-              f = full character set: alpha, digit, punctuation
-              a = abbreviated character set: alpha, digit 
-              default: f
+              f = full character set: alpha, digit, punctuation (space=_)
+              a = abbreviated character set: alpha, digit (space=_)
+              default: a
 -w <wordlen>  word length in chars, affects printing only
               default: 5
 
@@ -182,25 +201,57 @@ _0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
 
 You will need the character matrix (Vigenere square) to encrypt/decrypt.
 
-Steps to encrypt:
-1. Coordinate which sheet you will be using with the receiving party.
-2. Write your clear text above the characters on the sheet.
-3. For each character:
-   a. Look up the clear text character on the column header in the matrix.
-   b. Look up the key character on the row header in the matrix
-   c. The enrypted character is at the interesction of the column/row
-      write that below the key character on your sheet.
-4. The characters under the key text are your encrypted message, send this
-   to the receiving party.
+How to Encrypt
+--------------
+1. Generate your one time pad (otpsheet) and the character matrix and give
+   a copy to your peer
+   # otpadgen > otpsheet
+   # otpadgen -o matrix > otpmatrix
+2. Write your clear text above the characters on the one time pad.
+3. Encrypt one character at a time using the matrix:
+   - Find the column headed by the clear text character
+   - In that column find the row whose character matches the key character
+   - The first character in the row is your encrypted character, write
+     this under the key on the one time pad sheet
+4. Once you have done this for all the characters in your message, copy the
+   encrypted characters to a separate sheet of paper - this is the message
+   that you can hand your peer to be decrypted.
 5. Rejoice at the strength of your cryptography!
 
-Steps to decrypt:
-1. Coordinate which sheet you will use with the sender.
-2. Write one character of the encrypted text over each character in the one time pad
-3. For each character:
-	a.
-6. The characters above the key characters are the decrypted message.
-DUL1GWILEY-M2:otpadutils gwiley$ 
+How to Decrypt
+--------------
+1. Obtain copies of the one time pad sheet and the character matrix from your
+   peer.
+2. Write the encrypted message above the key characters on the one time pad.
+3. Decrypt one character at a time using the matrix:
+   - Find the column headed by the message character 
+   - In that column fund the row whose character matches the key character
+   - The first character in the row is your encrypted character, write this
+     under the key on the one time pad sheet
+4. The characters below the key characters are the decrypted message.
+5. Glory in the light of your unbreakable message.
+
+Here is an example of looking up the characters using the matrix:
+
+Given the following table segment (this is contrived to keep the demo short):
+
+    _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+-----------------------------------------------------------------------------
+_ | _ 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+0 | 0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _
+1 | 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0
+2 | 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1
+3 | 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z _ 0 1 2
+
+And given this message text:  M U S T _
+And given this one time pad:  O X T V 0
+The encrypted text would be:  1 2 0 1 0
+
+The Decrypt would look like this:
+Given this encrypted message:       1 2 0 1 0
+Given the same OTP used to encrypt: O X T V 0
+Results in the cleartext:           M U S T _
+
 ```
 
 #One Time Pad Encryption Theory
@@ -245,11 +296,10 @@ Better sources of entropy are simple hardware devices for which the hardware
 and software design is fully transparent.
 
 #TODO
+* real documentation - there is too much to put in a readme
 * fix terms - is this a vignere table rather than matrix
-* warn on chars not included in matrix
 * add automatic checksum
 * port to freebsd, osx
 * use autoconf/automake
 ** test for arc4random (avail on osx, not default ubuntu)
-* allow for alternative sources of entropy (files, hardware, etc)
 * man pages

@@ -1,13 +1,15 @@
 // otpadmsg.c
 // Glen Wiley <glen.wiley@gmail.com>
 //
-// one time pad generator for use in strong cryptographic exchanges
+// one time pad based message encrypt decrypt
 //
-// TODO: pretty formatted output, troff, HTML, PDF
-// TODO: option for using numbers only (hex/decimal)
-// TODO: add line break support
-// TODO: randomicity test output
-// TODO: encrypt/decrypt function
+// TODO: fix stats summary for hex sheet (count 2 char bytes)
+// TODO: translate message character case as needed
+// TODO: auto-detect char set 
+// TODO: auto-generated and checked checksum/hash
+// TODO: recommended approach for hash will fail because message includes
+//       chars that are ignored - fix the instructions
+// TODO: auto-detect headers etc. in sheet and message
 
 #include <errno.h>
 #include <string.h>
@@ -17,199 +19,406 @@
 #include <unistd.h>
 #include "otpadutils.h"
 
-//---------------------------------------- output_matrix
-void
-output_matrix(char *hdr)
+struct summary_st
 {
-	int line;
-	int col;
-	int tbllen;
-	int c;
-
-	if(hdr != NULL)
-	{
-		printf("%s\n\n", hdr);
-	}
-
-	tbllen = strlen(g_chartbl);
-
-	printf("    ");
-	for(col=0; col<tbllen; col++)
-		printf("%c ", g_chartbl[col]);
-	printf("\n");
-	printf("---");
-	for(col=0; col<tbllen; col++)
-		printf("--");
-	printf("\n");
-
-	for(line=0; line<tbllen; line++)
-	{
-		printf("%c | ", g_chartbl[line]);
-		for(col=0; col<tbllen; col++)
-		{
-			c = line + col;
-			if(c >= tbllen)
-				c = c - tbllen;
-			printf("%c ", g_chartbl[c]);
-		}
-		printf("\n");
-	}
-
-	return;
-} // output_matrix
-
-//---------------------------------------- output_text
-// produce plain text output
-void
-output_text(char *hdr, int keylen, int wordlen, int linelen)
-{
-	int  i;
-	char c;
-	char lc = 0;
-
-	if(hdr != NULL)
-	{
-		printf("%s\n", hdr);
-	}
-
-	printf("\n\n");
-
-	for(i=0; i<keylen; i++)
-	{
-		lc++;
-		c = getrandchar(NULL);
-		if(c == -1)
-		{
-			printf("ERROR: failed to read from entropy source %s, exiting...\n"
-			 , strerror(errno));
-			exit(1);
-		}
-
-		printf("%c ", c);
-
-		if(wordlen > 0 && lc % wordlen == 0)
-			printf("   ");
-
-		if(lc % linelen == 0 && (wordlen == 0 || lc % wordlen == 0))
-		{
-			lc = 0;
-			printf("\n\n\n");
-		}
-	}
-
-	printf("\n");
-	return;
-} // output_text
+	int msgbytestot;
+	int msgbytesbad;
+	int msglines;
+	int sheetbytes;
+	int sheetlines;
+}; 
 
 //---------------------------------------- usage
 void
 usage(void)
 {
 	printf(
-	 "USAGE: otpadgen [-m] [-H | -h <header>] [-l <linelen>] [-w <wordlen>] [-k <keylen>] [-s <f|a>] -o <text|num> \n"
-	 "-h <header>   print this string as the first line of the output\n"
-	 "-H            print a generated header string as the first line of the output\n"
-	 "-k <keylen>   key length in chars\n"
-	 "              default: %d\n"
-	 "-l <linelen>  line length in chars, used by text output mode\n"
-	 "              note that each char needs 2 spaces + word gaps\n"
-	 "              default: %d\n"
-	 "-m            character matrix output, no pad is generated"
-	 "-o text       output as simple text\n"
-	 "   num        output as numbers\n"
-	 "-s <f|a>      character set to use\n"
-	 "              f = full character set: alpha, digit, punctuation\n"
-	 "              a = abbreviated character set: alpha, digit \n"
-	 "              default: %c\n"
-	 "-w <wordlen>  word length in chars, affects printing only\n"
-	 "              default: %d\n"
+	 "USAGE: otpmsg [-l] [-dft] [-T <tbl_file>] [-s <a|f|h>] -S <sheet_file> -m <msg_file>\n"
+	 "-d              add message divider to output\n"
+	 "                and print summary data after message\n"
+	 "-f              fail if message character is not in character set\n"
+	 "                newline chars are always ignored\n"
+	 "                default: ignore non-matching characters\n"
+	 "-l              operate in character lookup mode, input one character\n"
+	 "                at a time on stdin and produce translated chars\n"
+	 "                in this case the sheet and message files are ignored\n"
+	 "-m <msg_file>   file containing a message to encrypt/decrypt\n"
+	 "-S <sheet_file> one time pad sheet to use to encrypt/decrypt msg\n"
+	 "-s <a|f|h>      character set to use (must match the one used by gen)\n"
+	 "                f = full character set: alpha, digit, punctuation (space=_)\n"
+	 "                a = abbreviated character set: alpha, digit (space=_)\n"
+	 "                h = hex numbers from 00-FF\n"
+	 "                default: %c\n"
+	 "-t              translate spaces in message to underscore\n"
+	 "                default is no\n"
 	 "\n"
-	 "Generate a one time pad that can be used for encrypted message exchanges.\n"
-	 "By default a printable format is produced in ASCII text that includes the\n"
-	 "following characters for the full set:\n"
-	 "%s\n"
-	 "and the following characters for the abbreviated set:\n"
-	 "%s\n"
-	 "<space> rendered as underscore (the underscore character is not supported)\n"
+	 "It is a good idea to generate a hash and include it in the message.\n"
+	 "For example, given a clear text file 'msg':\n"
+	 "# openssl sha1 msg | tr '[a-z]' '[A-Z]' | sed 's/.* //g' >> msg.sha1\n"
+	 "# cat msg msg.sha1 > msg.all\n"
+	 "# otpadmsg -s a -S sheet -m msg.all > msg.enc\n"
 	 "\n"
-	 "You will need the character matrix (Vigenere square) to encrypt/decrypt.\n"
+	 "The recipient of message.enc could decrypt, separate the hash from the file\n"
+	 "and run the hash for himself to erify that the entire message was trnasmitted.\n"
 	 "\n"
-	 "Steps to encrypt:\n"
-	 "1. Coordinate which sheet you will be using with the receiving party.\n"
-	 "2. Write your clear text above the characters on the sheet.\n"
-	 "3. For each character:\n"
-	 "   a. Look up the clear text character on the column header in the matrix.\n"
-	 "   b. Look up the key character on the row header in the matrix\n"
-	 "   c. The enrypted character is at the interesction of the column/row\n"
-	 "      write that below the key character on your sheet.\n"
-	 "4. The characters under the key text are your encrypted message, send this\n"
-	 "   to the receiving party.\n"
-	 "5. Rejoice at the strength of your cryptography!\n"
-	 "\n"
-	 "Steps to decrypt:\n"
-	 "1. Coordinate which sheet you will use with the sender.\n"
-	 "2. Write the encrypted message BELOW the key characters on the sheet.\n"
-	 "3. Look up the key character on the column header.\n"
-	 "4. Find the encrypted character in that column.\n"
-	 "5. Write the character in the row header above the key character.\n"
-	 "6. The characters above the key characters are the decrypted message.\n"
-	 , OTPAD_DFLT_KEYLEN, OTPAD_DFLT_LINE, OTPAD_DFLT_SET
-	 , OTPAD_DFLT_WORDLEN, g_setfull, g_setab
-	);
+	 , OTPAD_DFLT_SET);
 } // usage
+
+//---------------------------------------- translatemsg_num
+void
+translatemsg_num(struct summary_st *stats, char *fnsht, char *fnmsg, char failchars)
+{
+	FILE *fhsht;
+	FILE *fhmsg;
+	char shtbuf[OTPAD_MAX_LINE+3];
+	char msgbuf[OTPAD_MAX_LINE+3];
+	int  i;
+	int  l;
+	int  spos;
+	int  mpos;
+	char c;
+	int csht;
+	int cmsg;
+
+	stats->msgbytestot = 0;
+	stats->msgbytesbad = 0;
+	stats->msglines    = 0;
+	stats->sheetbytes  = 0;
+	stats->sheetlines  = 0;
+
+	fhsht = fopen(fnsht, "r");
+	if(fhsht == NULL)
+	{
+		fprintf(stderr, "ERROR: failed to open sheet file %s, %s, exiting\n"
+		 , fnsht, strerror(errno));
+		exit(1);
+	}
+	fhmsg = fopen(fnmsg, "r");
+	if(fhmsg == NULL)
+	{
+		fprintf(stderr, "ERROR: failed to open message file %s, %s, exiting\n"
+		 , fnmsg, strerror(errno));
+		exit(1);
+	}
+
+	// read message and consume the sheet as we go
+	// need to keep track of our position in the sheet stream since
+	// the chars/lines in message may not match the sheet
+	shtbuf[0] = '\0';
+	spos = 0;
+	while(fgets(msgbuf, OTPAD_MAX_LINE+2, fhmsg) != NULL)
+	{
+		stats->msglines++;
+		l = strlen(msgbuf);
+		stats->msgbytestot += l;
+		for(mpos=0; mpos < l; mpos++)
+		{
+			if(msgbuf[mpos] == '\n' || msgbuf[mpos] == '\r')
+				continue;
+
+			// fail on bogus chars if user wants us to
+
+			if(isxdigit(msgbuf[mpos]) != 0 || isxdigit(msgbuf[mpos+1]) != 0)
+			{
+				if(failchars == 'y')
+				{
+					printf("message line %d, char %d is not a hex digit, "
+					 "exiting\n", stats->msglines, mpos);
+					exit(1);
+				}
+				stats->msgbytesbad++;
+				continue;
+			}
+
+			sscanf(msgbuf+mpos, "%.2X", &cmsg);
+			mpos++; // the loop will increment it once more for us
+
+			// when we run out of sheet bytes read some more
+
+			while(1)
+			{
+				while(shtbuf[spos] == '\0')
+				{
+					if(fgets(shtbuf, OTPAD_MAX_LINE+2, fhsht) == NULL)
+					{
+						fprintf(stderr, "ERROR: exhausted sheet file before end of"
+						 " message, exiting\n");
+						exit(1);
+					}
+					spos = 0;
+				}
+
+				// consume chars until we are able to translate one
+
+				if(shtbuf[spos] != ' ' && shtbuf[spos] != '\n' 
+				 && shtbuf[spos] != '\r')
+				{
+					if(isxdigit(shtbuf[spos]) != 0 || isxdigit(shtbuf[spos+1]) != 0)
+					{
+						fprintf(stderr, "ERROR: sheet contains invalid hex digit "
+						 "at line %d, char %d, exiting\n", stats->sheetlines, spos);
+						exit(1);
+					}
+					sscanf(shtbuf+spos, "%.2X", &csht);
+					spos = spos + 2;
+
+					c = charlookup(cmsg, csht);
+					printf("%.2X", c);
+					stats->sheetbytes++;
+					break;
+				}
+				else
+				{
+					printf("%c", shtbuf[spos]);
+					spos++;
+				}
+			} // while(1)
+		} // for(mpos=0; mpos < l; mpos++)
+	} // while(fgets(msgbuf, OTPAD_MAX_LINE+2, fhmsg) != NULL)
+
+	fflush(stdout);
+
+	fclose(fhsht);
+	fclose(fhmsg);
+
+	return;
+} // translatemsg_num
+
+
+//---------------------------------------- translatemsg
+void
+translatemsg(struct summary_st *stats, char *fnsht, char *fnmsg, char failchars
+ , char txspc)
+{
+	FILE *fhsht;
+	FILE *fhmsg;
+	char shtbuf[OTPAD_MAX_LINE+3];
+	char msgbuf[OTPAD_MAX_LINE+3];
+	int  i;
+	int  l;
+	int  spos;
+	int  mpos;
+	char c;
+
+	stats->msgbytestot = 0;
+	stats->msgbytesbad = 0;
+	stats->msglines    = 0;
+	stats->sheetbytes  = 0;
+	stats->sheetlines  = 0;
+
+	fhsht = fopen(fnsht, "r");
+	if(fhsht == NULL)
+	{
+		fprintf(stderr, "ERROR: failed to open sheet file %s, %s, exiting\n"
+		 , fnsht, strerror(errno));
+		exit(1);
+	}
+	fhmsg = fopen(fnmsg, "r");
+	if(fhmsg == NULL)
+	{
+		fprintf(stderr, "ERROR: failed to open message file %s, %s, exiting\n"
+		 , fnmsg, strerror(errno));
+		exit(1);
+	}
+
+	// read message and consume the sheet as we go
+	// need to keep track of our position in the sheet stream since
+	// the chars/lines in message may not match the sheet
+	shtbuf[0] = '\0';
+	spos = 0;
+	while(fgets(msgbuf, OTPAD_MAX_LINE+2, fhmsg) != NULL)
+	{
+		stats->msglines++;
+		l = strlen(msgbuf);
+		stats->msgbytestot += l;
+		for(mpos=0; mpos < l; mpos++)
+		{
+			if(msgbuf[mpos] == '\n' || msgbuf[mpos] == '\r')
+				continue;
+
+			// translate spaces in message if user wants us to
+
+			if(msgbuf[mpos] == ' ' && txspc == 'y')
+				msgbuf[mpos] = '_';
+
+			// fail on bogus chars if user wants us to
+
+			if(strchr(g_chartbl, msgbuf[mpos]) == NULL)
+			{
+				if(failchars == 'y')
+				{
+					printf("message line %d, char %d is not in message set, "
+					 "exiting\n", stats->msglines, mpos);
+					exit(1);
+				}
+				stats->msgbytesbad++;
+				continue;
+			}
+
+			// when we run out of sheet bytes read some more
+
+			while(1)
+			{
+				while(shtbuf[spos] == '\0')
+				{
+					if(fgets(shtbuf, OTPAD_MAX_LINE+2, fhsht) == NULL)
+					{
+						fprintf(stderr, "ERROR: exhausted sheet file before end of"
+						 " message, exiting\n");
+						exit(1);
+					}
+					stats->sheetlines++;
+					spos = 0;
+				}
+
+				// consume chars until we are able to translate one
+
+				if(shtbuf[spos] != ' ' && shtbuf[spos] != '\n' 
+				 && shtbuf[spos] != '\r')
+				{
+					if(strchr(g_chartbl, c) == NULL)
+					{
+						fprintf(stderr, "ERROR: sheet file has invalid char at "
+						 "line %d, char %d, exiting\n", stats->sheetlines, spos);
+						exit(1);
+					}
+					c = charlookup(msgbuf[mpos], shtbuf[spos]);
+					printf("%c", c);
+					spos++;
+					stats->sheetbytes++;
+					break;
+				}
+				else
+				{
+					printf("%c", shtbuf[spos]);
+					spos++;
+				}
+			} // while(1)
+		} // for(mpos=0; mpos < l; mpos++)
+	} // while(fgets(msgbuf, OTPAD_MAX_LINE+2, fhmsg) != NULL)
+
+	fflush(stdout);
+
+	fclose(fhsht);
+	fclose(fhmsg);
+
+	return;
+} // translatemsg
+
+//---------------------------------------- interactivelookup
+// interactive lookup
+void
+interactivelookup(void)
+{
+	int  cmsg;
+	int  ckey;
+	int  c;
+	char buf[10];
+
+	while(( 1 ))
+	{
+		printf("message char? ");
+		fflush(stdout);
+		buf[0] = '\0';
+		fgets(buf, 4, stdin);
+		if(buf[0] == '\0' || buf[0] == '\n')
+			exit(0);
+		if(g_chartbl_typ == otpad_tbl_chr)
+		{
+			cmsg = buf[0];
+			if(strchr(g_chartbl, cmsg) == NULL)
+			{
+				printf("character set does not contain this character\n");
+				printf("char set: %s\n", g_chartbl);
+				continue;
+			}
+		}
+		else
+			sscanf(buf, "%X", &cmsg);
+
+
+		printf("key char? ");
+		fflush(stdout);
+		buf[0] = '\0';
+		fgets(buf, 4, stdin);
+		if(g_chartbl_typ == otpad_tbl_chr)
+		{
+			ckey = buf[0];
+			if(strchr(g_chartbl, ckey) == NULL)
+			{
+				printf("character set does not contain this character\n");
+				printf("char set: %s\n", g_chartbl);
+				continue;
+			}
+		}
+		else
+			sscanf(buf, "%X", &ckey);
+
+		c = charlookup(cmsg, ckey);
+		if(g_chartbl_typ == otpad_tbl_chr)
+		{
+			if(c == '\0')
+				printf("char lookup failed\n");
+			else
+				printf("char=%c\n\n", c);
+		}
+		else
+			printf("char=%.2X\n\n", c);
+	}
+	return;
+} // interactivelookup
 
 //---------------------------------------- main
 int
 main(int argc, char *argv[])
 {
+	struct summary_st stats;
 	int opt;
-	int keylen      = OTPAD_DFLT_KEYLEN;
-	int wordlen     = OTPAD_DFLT_WORDLEN;
-	int linelen     = OTPAD_DFLT_LINE;
-	char outputmode = '\0';
+	char mode       = 't';
+	char failchars  = 'n';
+	char summary    = 'n';
+	char txpsc      = 'n';
 	char charset    = OTPAD_DFLT_SET;
-	char *hdr       = NULL;
-	time_t now;
+	char *fnmsg     = NULL;
+	char *fnsht     = NULL;
+	char *fntbl     = NULL;
 	
 	//-------------------- command line options
 
-	while((opt=getopt(argc, argv, "?Hh:k:l:mo:s:w:")) != -1)
+	while((opt=getopt(argc, argv, "?dflm:s:S:tT:")) != -1)
 	{
 		switch(opt)
 		{
-			case 'h':
-				hdr = optarg;
-				break;
-
-			case 'H':
-				hdr = malloc(OTPAD_MAXHDR+1);
-				time(&now);
-				snprintf(hdr, OTPAD_MAXHDR-1, "Sheet Generated %s", ctime(&now));
-				hdr[OTPAD_MAXHDR-1] = '\0';
-				break;
-
-			case 'k':
-				keylen = atoi(optarg);
-				break;
-
 			case 'l':
-				linelen = atoi(optarg);
+				mode = 'l';
+				break;
+				
+			case 'd':
+				summary = 'y';
+				break;
+
+			case 'f':
+				failchars = 'y';
 				break;
 
 			case 'm':
-				outputmode = OTPAD_OUTPUT_MATRIX;
-				break;
-
-			case 'o':
-				outputmode = optarg[0];
+				fnmsg = optarg;
 				break;
 
 			case 's':
 				charset = optarg[0];
 				break;
 
-			case 'w':
-				wordlen = atoi(optarg);
+			case 'S':
+				fnsht = optarg;
+				break;
+
+			case 't':
+				txpsc = 'y';
+				break;
+
+			case 'T':
+				fntbl = optarg;
 				break;
 
             case '?':
@@ -220,34 +429,63 @@ main(int argc, char *argv[])
 		}
 	} // while
 
+	// arrange our character table
+
 	if(charset == OTPAD_SETFULL)
-		g_chartbl = g_setfull;
+		g_chartbl = g_ctbl_full;
 	else if(charset == OTPAD_SETAB)
-		g_chartbl = g_setab;
-	else
+		g_chartbl = g_ctbl_alnum;
+	else if(charset == OTPAD_SETHEX)
 	{
-		printf("otpadgen ERROR, unrecognized character set, exiting...\n");
+		g_chartbl = NULL;
+		g_chartbl_typ = otpad_tbl_num;
+	}
+	if(fntbl != NULL)
+	{
+		g_chartbl = readchartbl(fntbl);
+	}
+
+	if(g_chartbl == NULL && g_chartbl_typ == otpad_tbl_chr)
+	{
+		fprintf(stderr, "ERROR, unrecognized character set, exiting...\n");
 		exit(1);
 	}
 
-	if(outputmode != OTPAD_OUTPUT_MATRIX && keylen == 0)
+	// if user asked for interactive lookup of characters then we will
+	// not encrypt/decrypt
+
+	if(mode == 'l')
+		interactivelookup();
+
+	// interactive mode will exit() when done, so if we are here then
+	// the user expects us to translate the message
+
+	if(fnsht == NULL)
 	{
-		printf("otpadgen ERROR, no key length specified, exiting...\n");
+		fprintf(stderr, "ERROR, no sheet file specified, exiting...\n");
 		exit(1);
 	}
 
-	if(outputmode == OTPAD_OUTPUT_TEXT)
+	if(fnmsg == NULL)
 	{
-		srandom((int) time(NULL));
-		output_text(hdr, keylen, wordlen, linelen);
-	} else if(outputmode == OTPAD_OUTPUT_MATRIX)
-	{
-		output_matrix(hdr);
-	}
-	else
-	{
-		printf("otpadgen ERROR, no output mode specified, exiting...\n");
+		fprintf(stderr, "ERROR, no message file specified, exiting...\n");
 		exit(1);
+	}
+
+	if(g_chartbl_typ == otpad_tbl_chr)
+		translatemsg(&stats, fnsht, fnmsg, failchars, txpsc);
+
+	if(g_chartbl_typ == otpad_tbl_num)
+		translatemsg_num(&stats, fnsht, fnmsg, failchars);
+
+	if(summary == 'y')
+	{
+		printf("\n-------------------- end of message\n\n"
+		 "message bytes, total:          %d\n"
+		 "message bytes not in char set: %d\n"
+		 "message lines:                 %d\n"
+		 "sheet bytes used:              %d\n"
+		 , stats.msgbytestot, stats.msgbytesbad, stats.msglines, stats.sheetbytes);
 	}
 
 	return 0;
